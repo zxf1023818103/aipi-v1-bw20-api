@@ -6,6 +6,10 @@ spring:
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     default-property-inclusion: non_null
+  r2dbc:
+    url: ${SPRING_R2DBC_URL:r2dbc:postgresql://localhost:5432/iot}
+    username: ${SPRING_R2DBC_USERNAME:api_service}
+    password: ${SPRING_R2DBC_PASSWORD:api_service_password}
 
 server:
   port: 9000
@@ -29,4 +33,4 @@ spring:
 
 logging:
   level:
-    root: INFO
+    root: WARN

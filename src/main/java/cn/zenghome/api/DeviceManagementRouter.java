@@ -28,6 +28,6 @@ class DeviceManagementRouter {
                         .bodyValue(Result.ok(entityResponse.entity()));
             }
             return Mono.just(response);
-        });
+        }).switchIfEmpty(ServerResponse.ok().bodyValue(new Result<>(true, null, null)));
     }
 }

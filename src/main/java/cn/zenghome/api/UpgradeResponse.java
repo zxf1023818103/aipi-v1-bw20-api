@@ -2,9 +2,9 @@ package cn.zenghome.api;
 
 import java.net.URI;
 
-public record ParsedUri(String host, int port, String path, boolean tlsEnabled) {
+public record UpgradeResponse(String name, String host, int port, String path, boolean tlsEnabled) {
 
-    public static int getEffectivePort(URI uri) {
+    private static int getEffectivePort(URI uri) {
         int port = uri.getPort();
         if (port != -1) return port;
 
@@ -16,8 +16,8 @@ public record ParsedUri(String host, int port, String path, boolean tlsEnabled) 
         };
     }
 
-    public static ParsedUri from(URI uri) {
-        return new ParsedUri(uri.getHost(), getEffectivePort(uri),
+    public static UpgradeResponse from(String firmwareName, URI uri) {
+        return new UpgradeResponse(firmwareName, uri.getHost(), getEffectivePort(uri),
                 uri.getRawPath() + (uri.getRawQuery() != null ? "?" + uri.getRawQuery() : ""),
                 uri.getScheme().equalsIgnoreCase("https"));
     }
