@@ -1,3 +1,32 @@
 spring:
   application:
-    name: api
+    name: aipi-v1-bw20-api
+  profiles:
+    active: prod
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    default-property-inclusion: non_null
+
+server:
+  port: 9000
+  compression:
+    enabled: false
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+logging:
+  level:
+    cn.zenghome.api: DEBUG
+
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+logging:
+  level:
+    root: INFO
