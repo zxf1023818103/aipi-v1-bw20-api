@@ -11,16 +11,11 @@ description = 'aipi-v1-bw20-api'
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(25)
     }
 }
 
 repositories {
-    maven { url = 'https://maven.aliyun.com/repository/public' }
-    maven { url = 'https://maven.aliyun.com/repository/google' }
-    maven { url = 'https://maven.aliyun.com/repository/gradle-plugin' }
-    maven { url = 'https://maven.aliyun.com/repository/apache-snapshots' }
-
     mavenCentral()
 }
 
@@ -42,7 +37,24 @@ graalvmNative {
     binaries {
         main {
             imageName = 'bootstrap'
-            mainClass = 'cn.zenghome.api.Application'
         }
     }
+}
+
+tasks.named('bootBuildImage') {
+    environment = [
+            "BP_NATIVE_IMAGE": "true",
+            "BP_JVM_VERSION": "25",
+            "SERVER_PORT": "9000",
+            "BP_NATIVE_IMAGE_BUILD_ARGUMENTS": """
+                -H:+UnlockExperimentalVMOptions
+                --enable-native-access=ALL-UNNAMED
+                -H:MaxRuntimeCompileMethods=500
+            """,
+            "BPL_JAVA_INSTALL_OPTIONS": """
+                -Xmx64m
+                -Xms64m
+                -XX:MaxDirectMemorySize=32m
+            """,
+    ]
 }
