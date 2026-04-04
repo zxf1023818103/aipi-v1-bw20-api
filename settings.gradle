@@ -1,1 +1,1 @@
-rootProject.name = 'aipi-v1-bw20-api'
+rootProject.name = providers.gradleProperty('appName').getOrElse('aipi-v1-bw20-api')

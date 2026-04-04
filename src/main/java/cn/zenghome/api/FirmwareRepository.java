@@ -7,7 +7,5 @@ import reactor.core.publisher.Mono;
 @Repository
 public interface FirmwareRepository extends R2dbcRepository<Firmware, String> {
 
-    Mono<Firmware> findFirstByProductAndNameNotLikeOrderByVersionDesc(String product, String name);
-
     Mono<Firmware> findFirstByProductOrderByVersionDesc(String product);
 }

@@ -1,6 +1,7 @@
 spring:
   application:
-    name: aipi-v1-bw20-api
+    name: "@name@"
+    version: "@version@"
   profiles:
     active: prod
   jackson:
@@ -11,10 +12,51 @@ spring:
     username: ${SPRING_R2DBC_USERNAME:api_service}
     password: ${SPRING_R2DBC_PASSWORD:api_service_password}
 
+alibaba:
+  cloud:
+    access-key-id: ${ALIBABA_CLOUD_ACCESS_KEY_ID:}
+    access-key-secret: ${ALIBABA_CLOUD_ACCESS_KEY_SECRET:}
+    security-token: ${ALIBABA_CLOUD_SECURITY_TOKEN:}
+
+fc:
+  account-id: ${FC_ACCOUNT_ID:}
+  function-handler: ${FC_FUNCTION_HANDLER:}
+  function-memory-size: ${FC_FUNCTION_MEMORY_SIZE:}
+  function-name: ${FC_FUNCTION_NAME:}
+  region: ${FC_REGION:}
+  custom-listen-port: ${FC_CUSTOM_LISTEN_PORT:}
+  instance-id: ${FC_INSTANCE_ID:}
+
+oss:
+  region: ${FC_REGION:}
+
 server:
-  port: 9000
+  port: ${FC_CUSTOM_LISTEN_PORT:9000}
   compression:
     enabled: false
+
+management:
+  otlp:
+    metrics:
+      export:
+        url: ${HTTP_METRICS_ENDPOINT:}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${HTTP_TRACES_ENDPOINT:}
+    resource-attributes:
+      service.name: "FC:@name@"
+      service.version: "@version@"
+
+  endpoints:
+    web:
+      exposure:
+        include: env, health
+  endpoint:
+    env:
+      show-values: always     # 始终显示明文（注意：生产环境建议设为 when-authorized）
+
 ---
 spring:
   config:
@@ -30,7 +72,9 @@ spring:
   config:
     activate:
       on-profile: prod
+  autoconfigure:
+    exclude: org.springframework.boot.micrometer.metrics.autoconfigure.jvm.JvmMetricsAutoConfiguration
 
 logging:
   level:
-    root: WARN
+    root: INFO

@@ -1,3 +1,5 @@
+import org.apache.tools.ant.filters.ReplaceTokens
+
 plugins {
     id 'java'
     id 'org.springframework.boot' version '4.0.5'
@@ -6,8 +8,18 @@ plugins {
 }
 
 group = 'cn.zenghome'
-version = '0.0.1-SNAPSHOT'
-description = 'aipi-v1-bw20-api'
+version = findProperty('appVersion') ?: '0.0.1-SNAPSHOT'
+description = rootProject.name
+
+processResources {
+    inputs.property "version", project.version
+    filesMatching("**/application*.yaml") {
+        filter(ReplaceTokens, tokens: [
+                "name": project.name,
+                "version": project.version,
+        ])
+    }
+}
 
 java {
     toolchain {
@@ -22,7 +34,14 @@ repositories {
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-webflux'
     implementation 'org.springframework.boot:spring-boot-starter-data-r2dbc'
+    implementation 'org.springframework.boot:spring-boot-starter-opentelemetry'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+
     runtimeOnly 'org.postgresql:r2dbc-postgresql'
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    implementation 'com.aliyun:alibabacloud-oss-v2:0.3.2'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-webflux-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-data-r2dbc-test'

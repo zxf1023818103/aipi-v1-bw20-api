@@ -1,7 +1,10 @@
 package cn.zenghome.api;
 
+import org.jspecify.annotations.NullMarked;
+
 import java.net.URI;
 
+@NullMarked
 public record UpgradeResponse(String name, String host, int port, String path, boolean tlsEnabled) {
 
     private static int getEffectivePort(URI uri) {
@@ -16,9 +19,10 @@ public record UpgradeResponse(String name, String host, int port, String path, b
         };
     }
 
-    public static UpgradeResponse from(String firmwareName, URI uri) {
-        return new UpgradeResponse(firmwareName, uri.getHost(), getEffectivePort(uri),
-                uri.getRawPath() + (uri.getRawQuery() != null ? "?" + uri.getRawQuery() : ""),
-                uri.getScheme().equalsIgnoreCase("https"));
+    static UpgradeResponse from(String name, String url) {
+        var uri = URI.create(url);
+        int port = getEffectivePort(uri);
+        String path = uri.getRawPath() + (uri.getRawQuery() == null ? "" : "?" + uri.getRawQuery());
+        return new UpgradeResponse(name, uri.getHost(), port, path, uri.getScheme().equalsIgnoreCase("https"));
     }
 }

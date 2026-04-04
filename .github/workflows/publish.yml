@@ -2,15 +2,23 @@ name: Build and Publish Native Image (JDK 25)
 
 on:
   push:
-    branches: [ "master", "main" ]
+    tags:
+      - 'v*' # 当推送 v1.0.0 这种标签时触发
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  # 清洗后的应用名，用于 Gradle 和 ARMS 服务名
+  CLEAN_APP_NAME: ${{ github.event.repository.name }}
+  # 镜像基础名称 (不含 Registry)
+  IMAGE_BASE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-push:
+    environment:
+      name: prod
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -19,6 +27,16 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Show Version
+        run: echo "Current version is ${{ github.ref_name }}"
+
+      - name: Extract version from tag
+        id: get_version
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Extracted version: $VERSION"
 
       - name: Set up JDK 25
         uses: actions/setup-java@v4
@@ -34,12 +52,57 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push Native Image
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Setup Aliyun CLI
+        uses: aliyun/setup-aliyun-cli-action@v1
+
+      - name: Setup Aliyun CLI Credentials
+        run: |
+          aliyun plugin install --names aliyun-cli-fc
+          
+          aliyun configure set \
+            --access-key-id ${{ vars.ALIYUN_ACCESS_KEY_ID }} \
+            --access-key-secret ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }} \
+            --region ${{ vars.ALIYUN_FC_REGION }} \
+            --profile fc-deployer \
+            --mode AK \
+            --language en
+          
+          aliyun fc GetFunction --functionName ${{ env.CLEAN_APP_NAME }} > /dev/null
+
+      - name: Build Local Image with Spring Boot
         run: |
           ./gradlew bootBuildImage \
-            --imageName=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            -PBP_JVM_VERSION=25 \
-            -PBPL_JAVA_INSTALL_OPTIONS="-Xmx64m -Xms64m -XX:MaxDirectMemorySize=32m" \
-            -PBP_NATIVE_IMAGE_BUILD_ARGUMENTS="-H:+UnlockExperimentalVMOptions -H:MaxRuntimeCompileMethods=500 --enable-native-access=ALL-UNNAMED"
-          
-          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            --imageName=local-build-image:${{ env.VERSION }} \
+            -P appVersion=${{ env.VERSION }} \
+            -P appName=${{ env.CLEAN_APP_NAME }}
+
+      - name: Tag and Push to GHCR
+        run: |
+          GHCR_IMAGE_NAME=ghcr.io/${{ github.repository }}
+          docker tag local-build-image:${{ env.VERSION }} $GHCR_IMAGE_NAME:${{ env.VERSION }}
+          docker tag local-build-image:${{ env.VERSION }} $GHCR_IMAGE_NAME:latest
+          docker push $GHCR_IMAGE_NAME:${{ env.VERSION }}
+          docker push $GHCR_IMAGE_NAME:latest
+          echo "GHCR_IMAGE_NAME=$GHCR_IMAGE_NAME" >> $GITHUB_ENV
+
+      - name: Tag and Push to Docker Hub
+        run: |
+          DOCKERHUB_IMAGE_NAME=docker.io/${{ vars.DOCKERHUB_USERNAME }}/${{ env.CLEAN_APP_NAME }}
+          docker tag local-build-image:${{ env.VERSION }} $DOCKERHUB_IMAGE_NAME:${{ env.VERSION }}
+          docker tag local-build-image:${{ env.VERSION }} $DOCKERHUB_IMAGE_NAME:latest
+          docker push $DOCKERHUB_IMAGE_NAME:${{ env.VERSION }}
+          docker push $DOCKERHUB_IMAGE_NAME:latest
+          echo "DOCKERHUB_IMAGE_NAME=$DOCKERHUB_IMAGE_NAME" >> $GITHUB_ENV
+
+      - name: Deploy to Aliyun FC
+        run: |
+          IMAGE_NAME=$GHCR_IMAGE_NAME:${{ env.VERSION }}
+          UPDATE_FUNCTION_INPUT=$(aliyun fc GetFunction --functionName aipi-v1-bw20-api | jq -c '{customContainerConfig}' | jq -c --arg img "$IMAGE_NAME" '.customContainerConfig.image = $img' | jq -c 'del(.customContainerConfig.resolvedImageUri)' | jq -c '.customContainerConfig |= with_entries(select(.value != null and .value != {}))')
+          echo \$UPDATE_FUNCTION_INPUT=$UPDATE_FUNCTION_INPUT
+          aliyun fc UpdateFunction --functionName ${{ env.CLEAN_APP_NAME }} --body "$UPDATE_FUNCTION_INPUT" | jq '{customContainerConfig}'

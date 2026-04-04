@@ -1,7 +1,8 @@
 package cn.zenghome.api;
 
-import jakarta.annotation.Nullable;
-import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
-public record UpgradeRequest(@Nullable String firmwareName, @NonNull String product, @NonNull String deviceName) {
+@NullMarked
+public record UpgradeRequest(@Nullable String firmwareName, String product, String deviceName) {
 }
