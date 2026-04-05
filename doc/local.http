@@ -103,10 +103,10 @@ Content-Type: application/json
     client.test('场景四：同场景三，省略 firmwareName 字段', verifySuccessResult);
 %}
 
+### /firmware_count 测试
+
+GET localhost:9000/firmware_count
+
 ### Actuator 测试
 
 GET http://localhost:9000/actuator HTTP/1.1
-
-###
-
-GET http://localhost:9000/actuator/env HTTP/1.1

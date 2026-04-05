@@ -51,4 +51,10 @@ class UpgradeHandler {
             throw new RuntimeException(e);
         }
     }
+
+    public Mono<ServerResponse> firmwareCount(ServerRequest request) {
+        return request.bodyToMono(Void.class)
+                .then(firmwareRepository.count())
+                .flatMap(count -> ServerResponse.ok().bodyValue(count));
+    }
 }

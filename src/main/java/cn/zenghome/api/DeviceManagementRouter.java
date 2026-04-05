@@ -6,16 +6,18 @@ import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.server.*;
 import reactor.core.publisher.Mono;
 
-import static org.springframework.web.reactive.function.server.RequestPredicates.POST;
-import static org.springframework.web.reactive.function.server.RequestPredicates.accept;
+import static org.springframework.web.reactive.function.server.RequestPredicates.*;
 
 @Configuration(proxyBeanMethods = false)
 class DeviceManagementRouter {
 
     @Bean
     public RouterFunction<ServerResponse> route(UpgradeHandler upgradeHandler) {
-        return RouterFunctions.route(POST("/upgrade").and(accept(MediaType.APPLICATION_JSON)), upgradeHandler::upgrade)
-                .filter(wrapResult());
+        var upgradeRoute = RouterFunctions
+                .route(POST("/upgrade").and(accept(MediaType.APPLICATION_JSON)), upgradeHandler::upgrade);
+        var readyRoute = RouterFunctions
+                .route(GET("/firmware_count").and(accept(MediaType.ALL)), upgradeHandler::firmwareCount);
+        return RouterFunctions.route().add(readyRoute).add(upgradeRoute).filter(wrapResult()).build();
     }
 
     private HandlerFilterFunction<ServerResponse, ServerResponse> wrapResult() {

@@ -46,7 +46,7 @@ management:
         otlp:
           endpoint: ${HTTP_TRACES_ENDPOINT:}
     resource-attributes:
-      service.name: "FC:@name@"
+      service.name: "@name@"
       service.version: "@version@"
 
   endpoints:
@@ -78,3 +78,8 @@ spring:
 logging:
   level:
     root: INFO
+
+management:
+  opentelemetry:
+    resource-attributes:
+      service.name: "FC:@name@"
