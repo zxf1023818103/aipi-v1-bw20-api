@@ -7,6 +7,9 @@ spring:
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     default-property-inclusion: non_null
+    serialization:
+      indent-output: false
+
   r2dbc:
     url: ${SPRING_R2DBC_URL:r2dbc:postgresql://localhost:5432/iot}
     username: ${SPRING_R2DBC_USERNAME:api_service}
@@ -56,6 +59,10 @@ management:
   endpoint:
     env:
       show-values: always     # 始终显示明文（注意：生产环境建议设为 when-authorized）
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%.15t] %clr(%-25.25logger{24}){cyan}: %m%n"
 
 ---
 spring:
