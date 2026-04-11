@@ -55,10 +55,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: env, health
-  endpoint:
-    env:
-      show-values: always     # 始终显示明文（注意：生产环境建议设为 when-authorized）
+        include: health
 
 logging:
   pattern:
