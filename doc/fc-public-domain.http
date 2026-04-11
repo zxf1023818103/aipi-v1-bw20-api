@@ -102,3 +102,11 @@ Content-Type: application/json
     import verifySuccessResult from './test'
     client.test('场景四：同场景三，省略 firmwareName 字段', verifySuccessResult);
 %}
+
+### /firmware_count 测试
+
+GET https://aipi-v-bw-api-ohfubnzzqo.cn-beijing.fcapp.run/firmware_count
+
+### Actuator 测试
+
+GET https://aipi-v-bw-api-ohfubnzzqo.cn-beijing.fcapp.run/actuator/env
