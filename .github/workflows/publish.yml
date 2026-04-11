@@ -11,8 +11,6 @@ env:
   IMAGE_NAME: ${{ github.repository }}
   # 清洗后的应用名，用于 Gradle 和 ARMS 服务名
   CLEAN_APP_NAME: ${{ github.event.repository.name }}
-  # 镜像基础名称 (不含 Registry)
-  IMAGE_BASE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-push:
@@ -58,23 +56,6 @@ jobs:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Setup Aliyun CLI
-        uses: aliyun/setup-aliyun-cli-action@v1
-
-      - name: Setup Aliyun CLI Credentials
-        run: |
-          aliyun plugin install --names aliyun-cli-fc
-          
-          aliyun configure set \
-            --access-key-id ${{ vars.ALIYUN_ACCESS_KEY_ID }} \
-            --access-key-secret ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }} \
-            --region ${{ vars.ALIYUN_FC_REGION }} \
-            --profile fc-deployer \
-            --mode AK \
-            --language en
-          
-          aliyun fc GetFunction --functionName ${{ env.CLEAN_APP_NAME }} > /dev/null
-
       - name: Build Local Image with Spring Boot
         run: |
           ./gradlew bootBuildImage \
@@ -102,24 +83,3 @@ jobs:
           docker push $DOCKERHUB_IMAGE_NAME:${{ env.VERSION }}
           docker push $DOCKERHUB_IMAGE_NAME:latest
           echo "DOCKERHUB_IMAGE_NAME=$DOCKERHUB_IMAGE_NAME" >> $GITHUB_ENV
-
-      - name: Deploy to Aliyun FC
-        run: |
-          IMAGE_NAME=$GHCR_IMAGE_NAME:${{ env.VERSION }}
-          UPDATE_FUNCTION_INPUT=$(aliyun fc GetFunction --functionName aipi-v1-bw20-api | jq -c '{customContainerConfig}' | jq -c --arg img "$IMAGE_NAME" '.customContainerConfig.image = $img' | jq -c 'del(.customContainerConfig.resolvedImageUri)' | jq -c '.customContainerConfig |= with_entries(select(.value != null and .value != {}))')
-          echo \$UPDATE_FUNCTION_INPUT=$UPDATE_FUNCTION_INPUT
-          FC_RESPONSE=$(aliyun fc UpdateFunction --functionName ${{ env.CLEAN_APP_NAME }} --body "$UPDATE_FUNCTION_INPUT")
-          FC_DIGEST=$(echo "$FC_RESPONSE" | jq -r '.customContainerConfig.resolvedImageUri' | cut -d'@' -f2)
-          echo "FC Digest: $FC_DIGEST"
-          if [ "${{ env.BUILD_DIGEST }}" != "$FC_DIGEST" ]; then
-            echo "::::::::::::::::::::::::::::::::::::::::::::::::::::::::"
-            echo "❌ ERROR: Image Digest Mismatch!"
-            echo "Expected (Build): ${{ env.BUILD_DIGEST }}"
-            echo "Actual (Aliyun FC): $FC_DIGEST"
-            echo "Possible cause: Latency in Registry syncing or Aliyun cache issues."
-            echo "::::::::::::::::::::::::::::::::::::::::::::::::::::::::"
-            exit 1
-          else
-            echo "✅ Digest Verification Successful!"
-            echo "The production environment is confirmed to be running the latest image."
-          fi
