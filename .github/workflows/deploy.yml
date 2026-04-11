@@ -14,7 +14,6 @@ jobs:
   deploy:
     environment:
       name: prod
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -24,15 +23,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Show Version
-        run: echo "Current version is ${{ github.ref_name }}"
-
-      - name: Extract version from tag
-        id: get_version
+      - name: Extract Version from Tag
         run: |
-          VERSION=${GITHUB_REF_NAME#v}
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Extracted version: $VERSION"
+          git fetch origin master
+          TAG=$(git tag --points-at origin/master)
+          if [ -z "$TAG" ]; then
+            echo "No tag found on the tip of the default branch. Skipping deployment."
+            exit 1
+          else
+            echo "Found tag $TAG. Proceeding with deployment..."
+            VERSION=${TAG#v}
+            echo "VERSION=$VERSION" >> $GITHUB_ENV
+            echo "Extracted version: $VERSION"
+          fi
 
       - name: Setup Aliyun CLI
         uses: aliyun/setup-aliyun-cli-action@v1
