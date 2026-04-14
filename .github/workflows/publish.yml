@@ -2,48 +2,33 @@ name: Build and Publish Native Image (JDK 25)
 
 on:
   push:
-    tags:
-      - 'v*' # 当推送 v1.0.0 这种标签时触发
+    branches:
+      - master
+      - dev
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
-  # 清洗后的应用名，用于 Gradle 和 ARMS 服务名
-  CLEAN_APP_NAME: ${{ github.event.repository.name }}
-  # 镜像基础名称 (不含 Registry)
-  IMAGE_BASE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-push:
     environment:
       name: prod
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Show Version
-        run: echo "Current version is ${{ github.ref_name }}"
-
       - name: Extract version from tag
         id: get_version
+        env:
+          GIT_BRANCH: ${{ github.ref_name }}
+          FULL_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          VERSION=${GITHUB_REF_NAME#v}
+          VERSION=$GIT_BRANCH-${FULL_SHA::7}
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "Extracted version: $VERSION"
-
-      - name: Set up JDK 25
-        uses: actions/setup-java@v4
-        with:
-          java-version: '25'
-          distribution: 'liberica'
-          cache: 'gradle'
 
       - name: Log in to the Container registry
         uses: docker/login-action@v3
@@ -52,16 +37,55 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
+      - name: Check if Image Exists
+        id: check_image
+        run: |
+          if docker manifest inspect "${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ github.repository }}:${{ env.VERSION }}" > /dev/null 2>&1; then
+            echo "IMAGE_EXISTS=true" >> $GITHUB_OUTPUT
+          else
+            echo "IMAGE_EXISTS=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout repository
+        if: steps.check_image.outputs.IMAGE_EXISTS == 'false'
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        if: steps.check_image.outputs.IMAGE_EXISTS == 'false'
+        uses: actions/setup-java@v4
         with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          java-version: '25'
+          distribution: 'liberica'
+          cache: 'gradle'
+
+      - name: Build Local Image with Spring Boot
+        if: steps.check_image.outputs.IMAGE_EXISTS == 'false'
+        run: |
+          ./gradlew bootBuildImage \
+            --imageName=${{ env.REGISTRY }}/${{ github.repository }}:${{ env.VERSION }} \
+            -P appVersion=${{ env.VERSION }} \
+            -P appName=${{ github.event.repository.name }}
+
+      - name: Tag and Push to GHCR
+        if: steps.check_image.outputs.IMAGE_EXISTS == 'false'
+        run: |
+          docker tag ${{ env.REGISTRY }}/${{ github.repository }}:${{ env.VERSION }} ${{ env.REGISTRY }}/${{ github.repository }}:latest
+          docker push ${{ env.REGISTRY }}/${{ github.repository }}:${{ env.VERSION }}
+          docker push ${{ env.REGISTRY }}/${{ github.repository }}:latest
+
+      - name: Get Image Digest
+        id: get_image_digest
+        run: |
+          BUILD_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.REGISTRY }}/${{ github.repository }}:${{ env.VERSION }} | cut -d'@' -f2)
+          echo "Build Digest: $BUILD_DIGEST"
+          echo "BUILD_DIGEST=$BUILD_DIGEST" >> $GITHUB_ENV
 
       - name: Setup Aliyun CLI
+        if: github.ref_name == 'master'
         uses: aliyun/setup-aliyun-cli-action@v1
 
       - name: Setup Aliyun CLI Credentials
+        if: github.ref_name == 'master'
         run: |
           aliyun plugin install --names aliyun-cli-fc
           
@@ -72,43 +96,29 @@ jobs:
             --profile fc-deployer \
             --mode AK \
             --language en
-          
-          aliyun fc GetFunction --functionName ${{ env.CLEAN_APP_NAME }} > /dev/null
 
-      - name: Build Local Image with Spring Boot
+      - name: Check Aliyun FC Running Image
+        if: github.ref_name == 'master'
+        id: check_aliyun_running_image
         run: |
-          ./gradlew bootBuildImage \
-            --imageName=local-build-image:${{ env.VERSION }} \
-            -P appVersion=${{ env.VERSION }} \
-            -P appName=${{ env.CLEAN_APP_NAME }}
-
-      - name: Tag and Push to GHCR
-        run: |
-          GHCR_IMAGE_NAME=ghcr.io/${{ github.repository }}
-          docker tag local-build-image:${{ env.VERSION }} $GHCR_IMAGE_NAME:${{ env.VERSION }}
-          docker tag local-build-image:${{ env.VERSION }} $GHCR_IMAGE_NAME:latest
-          docker push $GHCR_IMAGE_NAME:${{ env.VERSION }}
-          docker push $GHCR_IMAGE_NAME:latest
-          echo "GHCR_IMAGE_NAME=$GHCR_IMAGE_NAME" >> $GITHUB_ENV
-          BUILD_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $GHCR_IMAGE_NAME:${{ env.VERSION }} | cut -d'@' -f2)
-          echo "Build Digest: $BUILD_DIGEST"
-          echo "BUILD_DIGEST=$BUILD_DIGEST" >> $GITHUB_ENV
-
-      - name: Tag and Push to Docker Hub
-        run: |
-          DOCKERHUB_IMAGE_NAME=docker.io/${{ vars.DOCKERHUB_USERNAME }}/${{ env.CLEAN_APP_NAME }}
-          docker tag local-build-image:${{ env.VERSION }} $DOCKERHUB_IMAGE_NAME:${{ env.VERSION }}
-          docker tag local-build-image:${{ env.VERSION }} $DOCKERHUB_IMAGE_NAME:latest
-          docker push $DOCKERHUB_IMAGE_NAME:${{ env.VERSION }}
-          docker push $DOCKERHUB_IMAGE_NAME:latest
-          echo "DOCKERHUB_IMAGE_NAME=$DOCKERHUB_IMAGE_NAME" >> $GITHUB_ENV
+          FUNCTION_INFO_JSON=$(aliyun fc GetFunction --functionName "${{ github.event.repository.name }}")
+          echo "FUNCTION_INFO_JSON<<EOF" >> $GITHUB_OUTPUT
+          echo "$FUNCTION_INFO_JSON" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          CURRENT_FC_IMAGE=$(echo $FUNCTION_INFO_JSON | jq -r '.customContainerConfig.image')
+          echo CURRENT_FC_IMAGE=$CURRENT_FC_IMAGE >> $GITHUB_OUTPUT
+          TARGET_FC_IMAGE="${{ env.REGISTRY }}/${{ github.repository }}:${{ env.VERSION }}"
+          echo TARGET_FC_IMAGE=$TARGET_FC_IMAGE >> $GITHUB_OUTPUT
 
       - name: Deploy to Aliyun FC
+        if: github.ref_name == 'master' && steps.check_aliyun_running_image.outputs.CURRENT_FC_IMAGE != steps.check_aliyun_running_image.outputs.TARGET_FC_IMAGE
+        env:
+          FUNCTION_INFO_JSON: ${{ steps.check_aliyun_running_image.outputs.FUNCTION_INFO_JSON }}
+          TARGET_FC_IMAGE: ${{ steps.check_aliyun_running_image.outputs.TARGET_FC_IMAGE }}
         run: |
-          IMAGE_NAME=$GHCR_IMAGE_NAME:${{ env.VERSION }}
-          UPDATE_FUNCTION_INPUT=$(aliyun fc GetFunction --functionName aipi-v1-bw20-api | jq -c '{customContainerConfig}' | jq -c --arg img "$IMAGE_NAME" '.customContainerConfig.image = $img' | jq -c 'del(.customContainerConfig.resolvedImageUri)' | jq -c '.customContainerConfig |= with_entries(select(.value != null and .value != {}))')
-          echo \$UPDATE_FUNCTION_INPUT=$UPDATE_FUNCTION_INPUT
-          FC_RESPONSE=$(aliyun fc UpdateFunction --functionName ${{ env.CLEAN_APP_NAME }} --body "$UPDATE_FUNCTION_INPUT")
+          UPDATE_FUNCTION_INPUT=$(echo $FUNCTION_INFO_JSON | jq -r '{customContainerConfig}' | jq -r --arg img "$TARGET_FC_IMAGE" '.customContainerConfig.image = $img' | jq -r 'del(.customContainerConfig.resolvedImageUri)' | jq -r '.customContainerConfig |= with_entries(select(.value != null and .value != {}))')
+          echo UPDATE_FUNCTION_INPUT=$UPDATE_FUNCTION_INPUT
+          FC_RESPONSE=$(aliyun fc UpdateFunction --functionName ${{ github.event.repository.name }} --body "$UPDATE_FUNCTION_INPUT")
           FC_DIGEST=$(echo "$FC_RESPONSE" | jq -r '.customContainerConfig.resolvedImageUri' | cut -d'@' -f2)
           echo "FC Digest: $FC_DIGEST"
           if [ "${{ env.BUILD_DIGEST }}" != "$FC_DIGEST" ]; then
