@@ -8,7 +8,7 @@ public record OssObject(@NonNull String bucket, @NonNull String key) {
     public static @NonNull OssObject from(@NonNull String objectName) {
         var uri = URI.create(objectName);
         var bucket = uri.getHost();
-        var key = uri.getPath().substring(1);
+        var key = uri.getPath();
         return new OssObject(bucket, key);
     }
 }

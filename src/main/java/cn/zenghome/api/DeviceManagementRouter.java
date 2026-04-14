@@ -13,11 +13,21 @@ class DeviceManagementRouter {
 
     @Bean
     public RouterFunction<ServerResponse> route(UpgradeHandler upgradeHandler) {
-        var upgradeRoute = RouterFunctions
-                .route(POST("/upgrade").and(accept(MediaType.APPLICATION_JSON)), upgradeHandler::upgrade);
-        var readyRoute = RouterFunctions
-                .route(GET("/firmware_count").and(accept(MediaType.ALL)), upgradeHandler::firmwareCount);
-        return RouterFunctions.route().add(readyRoute).add(upgradeRoute).filter(wrapResult()).build();
+        var upgradeViaOssRoute = RouterFunctions
+                .route(POST("/upgrade-oss").and(accept(MediaType.APPLICATION_JSON)), upgradeHandler::upgradeViaOss);
+        var upgradeViaCdnRoute = RouterFunctions
+                .route(POST("/upgrade-cdn").and(accept(MediaType.APPLICATION_JSON)), upgradeHandler::upgradeViaCdn);
+        var defaultUpgradeRoute = RouterFunctions
+                .route(POST("/upgrade").and(accept(MediaType.APPLICATION_JSON)), upgradeHandler::upgradeViaCdn);
+        var firmwareCountRoute = RouterFunctions
+                .route(GET("/firmware-count").and(accept(MediaType.ALL)), upgradeHandler::firmwareCount);
+        return RouterFunctions.route()
+                .add(firmwareCountRoute)
+                .add(upgradeViaOssRoute)
+                .add(upgradeViaCdnRoute)
+                .add(defaultUpgradeRoute)
+                .filter(wrapResult())
+                .build();
     }
 
     private HandlerFilterFunction<ServerResponse, ServerResponse> wrapResult() {

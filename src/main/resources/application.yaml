@@ -33,6 +33,11 @@ fc:
 oss:
   region: ${FC_REGION:}
 
+cdn:
+  host: firmware.zenghome.cn
+  port: 443
+  tls-enabled: true
+
 server:
   port: ${FC_CUSTOM_LISTEN_PORT:9000}
   compression:
