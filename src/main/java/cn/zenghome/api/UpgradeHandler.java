@@ -23,9 +23,13 @@ class UpgradeHandler {
 
     private final OSSClientBuilder ossClientBuilder;
 
+    private final CdnConfiguration cdnConfiguration;
+
     public UpgradeHandler(FirmwareRepository firmwareRepository, OssConfiguration ossConfiguration,
-                          AlibabaCloudConfiguration alibabaCloudConfiguration, FcConfiguration fcConfiguration) {
+                          AlibabaCloudConfiguration alibabaCloudConfiguration, FcConfiguration fcConfiguration,
+                          CdnConfiguration cdnConfiguration) {
         this.firmwareRepository = firmwareRepository;
+        this.cdnConfiguration = cdnConfiguration;
         ossClientBuilder = OSSClient.newBuilder()
                 .region(ossConfiguration.getRegion())
                 .accountId(fcConfiguration.getAccountId())
@@ -34,7 +38,7 @@ class UpgradeHandler {
                         alibabaCloudConfiguration.getAccessKeySecret(), alibabaCloudConfiguration.getSecurityToken()));
     }
 
-    public Mono<ServerResponse> upgrade(ServerRequest request) {
+    public Mono<ServerResponse> upgradeViaOss(ServerRequest request) {
         try (OSSClient client = ossClientBuilder.build()) {
             return request.bodyToMono(UpgradeRequest.class)
                     .flatMap(upgradeRequest -> firmwareRepository
@@ -42,7 +46,7 @@ class UpgradeHandler {
                             .filter(firmware -> !firmware.name().equals(upgradeRequest.firmwareName())))
                     .flatMap(firmware -> {
                         var ossObject = OssObject.from(firmware.objectName());
-                        var presignResult = client.presign(GetObjectRequest.newBuilder().bucket(ossObject.bucket()).key(ossObject.key()).build(),
+                        var presignResult = client.presign(GetObjectRequest.newBuilder().bucket(ossObject.bucket()).key(ossObject.key().substring(1)).build(),
                                 PresignOptions.newBuilder().expiration(Duration.ofMinutes(15)).build());
                         var response = UpgradeResponse.from(firmware.name(), presignResult.url());
                         return ServerResponse.ok().bodyValue(response);
@@ -50,6 +54,18 @@ class UpgradeHandler {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public Mono<ServerResponse> upgradeViaCdn(ServerRequest request) {
+        return request.bodyToMono(UpgradeRequest.class)
+                .flatMap(upgradeRequest -> firmwareRepository
+                        .findFirstByProductOrderByVersionDesc(upgradeRequest.product())
+                        .filter(firmware -> !firmware.name().equals(upgradeRequest.firmwareName())))
+                .flatMap(firmware -> {
+                    var ossObject = OssObject.from(firmware.objectName());
+                    return ServerResponse.ok().bodyValue(new UpgradeResponse(firmware.name(), cdnConfiguration.getHost(),
+                            cdnConfiguration.getPort(), ossObject.key(), cdnConfiguration.isTlsEnabled()));
+                });
     }
 
     public Mono<ServerResponse> firmwareCount(ServerRequest request) {
