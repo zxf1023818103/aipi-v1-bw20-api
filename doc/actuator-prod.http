@@ -1,0 +1,4 @@
+### 获取软件版本号
+GET https://api.zenghome.cn/actuator/info
+
+###
