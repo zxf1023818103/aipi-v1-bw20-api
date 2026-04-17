@@ -1,0 +1,4 @@
+### 获取软件版本号
+GET http://localhost:9000/actuator/info
+
+###

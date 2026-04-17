@@ -49,6 +49,8 @@ jobs:
       - name: Checkout repository
         if: steps.check_image.outputs.IMAGE_EXISTS == 'false'
         uses: actions/checkout@v4
+        with:
+          fetch-depth: '0'
 
       - name: Set up JDK 25
         if: steps.check_image.outputs.IMAGE_EXISTS == 'false'
