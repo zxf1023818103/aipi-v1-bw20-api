@@ -60,7 +60,11 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,info
+
+  info:
+    git:
+      enabled: true
 
 logging:
   pattern:
