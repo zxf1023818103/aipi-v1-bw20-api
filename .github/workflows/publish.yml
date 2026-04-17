@@ -26,7 +26,7 @@ jobs:
           GIT_BRANCH: ${{ github.ref_name }}
           FULL_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          VERSION=$GIT_BRANCH-${FULL_SHA::7}
+          VERSION=${GIT_BRANCH/\//-}-${FULL_SHA::7}
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "Extracted version: $VERSION"
 
@@ -49,6 +49,8 @@ jobs:
       - name: Checkout repository
         if: steps.check_image.outputs.IMAGE_EXISTS == 'false'
         uses: actions/checkout@v4
+        with:
+          fetch-depth: '0'
 
       - name: Set up JDK 25
         if: steps.check_image.outputs.IMAGE_EXISTS == 'false'
